@@ -377,7 +377,7 @@ class ConformerWrapper(nn.Module):
         self,
         *,
         num_tokens,
-        conformer: Union[Conformer, Dict[str, any]]
+        conformer #Union[Conformer, Dict[str, any]]
     ):
         super().__init__()
         self.conformer = conformer
