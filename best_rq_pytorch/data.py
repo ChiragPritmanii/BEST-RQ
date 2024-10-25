@@ -44,6 +44,7 @@ class AudioDataset(Dataset):
 
         self.files = files
         self.target_sr = 24000
+        self.max_length_in_seconds = max_length_in_seconds
         self.max_length = (
             (max_length_in_seconds * self.target_sr)
             if exists(max_length_in_seconds)
