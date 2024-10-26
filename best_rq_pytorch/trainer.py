@@ -94,6 +94,8 @@ class BestRQPretrainer(nn.Module):
 
         self.accelerator = Accelerator(
             split_batches = split_batches,
+            log_with = "tensorboard",
+            mixed_precision = "fp16", # for trial
             **accelerate_kwargs
         )
 
@@ -178,7 +180,7 @@ class BestRQPretrainer(nn.Module):
         self.results_folder.mkdir(parents = True, exist_ok = True)
 
         hps = {"num_train_steps": num_train_steps, "num_warmup_steps": num_warmup_steps, "learning_rate": lr, "initial_learning_rate": lr}
-        self.accelerator.init_trackers("speechspeech", config=hps)
+        self.accelerator.init_trackers("music_semantics", config=hps)
 
     def save(self, path):
         pkg = dict(
@@ -249,6 +251,7 @@ class BestRQPretrainer(nn.Module):
         for _ in range(self.grad_accum_every):
             x, = next(self.dl_iter)
 
+            # outputs: loss, logits
             loss, _ = self.train_wrapper(x)
 
             self.accelerator.backward(loss / self.grad_accum_every)
