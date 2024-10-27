@@ -16,6 +16,9 @@ from best_rq_pytorch.optimizer import get_optimizer
 from best_rq_pytorch.data import get_dataloader
 
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import DistributedDataParallelKwargs, InitProcessGroupKwargs
+
+DEFAULT_DDP_KWARGS = DistributedDataParallelKwargs(find_unused_parameters = True)
 
 # utilities
 
@@ -97,6 +100,7 @@ class BestRQPretrainer(nn.Module):
             log_with = "tensorboard",
             project_dir = "/home/chirag/audio_tokenizer/BEST-RQ/logs",
             mixed_precision = "fp16", # for trial
+            kwargs_handlers = [DEFAULT_DDP_KWARGS],
             **accelerate_kwargs
         )
 
