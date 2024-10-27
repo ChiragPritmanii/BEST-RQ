@@ -48,7 +48,7 @@ trainer = BestRQPretrainer(
     lr = 5e-4,
     num_warmup_steps = 1000,
     initial_lr = 1e-5,
-    batch_size = 2,
+    batch_size = 1,
     grad_accum_every = 1,
     mask_prob = 0.6
 )
