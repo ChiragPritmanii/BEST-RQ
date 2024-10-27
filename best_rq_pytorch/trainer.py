@@ -84,7 +84,7 @@ class BestRQPretrainer(nn.Module):
         log_every = 10,
         save_results_every = 100,
         save_model_every = 1000,
-        results_folder = './results',
+        results_folder = '"/home/chirag/audio_tokenizer/BEST-RQ/results',
         force_clear_prev_results = None,
         split_batches = False,
         drop_last = False,
@@ -95,6 +95,7 @@ class BestRQPretrainer(nn.Module):
         self.accelerator = Accelerator(
             split_batches = split_batches,
             log_with = "tensorboard",
+            project_dir = "/home/chirag/audio_tokenizer/BEST-RQ/logs",
             mixed_precision = "fp16", # for trial
             **accelerate_kwargs
         )
