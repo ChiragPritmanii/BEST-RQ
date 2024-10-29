@@ -7,7 +7,9 @@ import torch.nn.functional as F
 
 from torchaudio import transforms as T
 
-from vector_quantize_pytorch.random_projection_quantizer import RandomProjectionQuantizer
+from vector_quantize_pytorch.random_projection_quantizer import (
+    RandomProjectionQuantizer,
+)
 
 from best_rq_pytorch.conformer import ConformerWrapper
 
@@ -15,38 +17,44 @@ from einops import rearrange
 
 # utilities
 
+
 def exists(val):
     return val is not None
+
 
 def default(val, d):
     return val if exists(val) else d
 
-def get_mask_subset_prob(mask, prob, min_mask = 0):
+
+def get_mask_subset_prob(mask, prob, min_mask=0):
     batch, seq, device = *mask.shape, mask.device
-    num_to_mask = (mask.sum(dim = -1, keepdim = True) * prob).clamp(min = min_mask)
-    logits = torch.rand((batch, seq), device = device)
+    num_to_mask = (mask.sum(dim=-1, keepdim=True) * prob).clamp(min=min_mask)
+    logits = torch.rand((batch, seq), device=device)
     logits = logits.masked_fill(~mask, -1)
 
-    randperm = logits.argsort(dim = -1).float()
+    randperm = logits.argsort(dim=-1).float()
 
-    num_padding = (~mask).sum(dim = -1, keepdim = True)
+    num_padding = (~mask).sum(dim=-1, keepdim=True)
     randperm -= num_padding
 
     subset_mask = randperm < num_to_mask
     subset_mask.masked_fill_(~mask, False)
     return subset_mask
 
+
 def set_eos_id(t: Tensor, eos_id: int, pad_id: int):
-    eos_indices = ((t == pad_id).cumsum(dim = -1) == 0).sum(dim = -1, keepdim = True).long()
+    eos_indices = ((t == pad_id).cumsum(dim=-1) == 0).sum(dim=-1, keepdim=True).long()
 
-    batch_range = torch.arange(t.shape[0], device = t.device, dtype = torch.long)
-    batch_range = rearrange(batch_range, '... -> ... 1')
+    batch_range = torch.arange(t.shape[0], device=t.device, dtype=torch.long)
+    batch_range = rearrange(batch_range, "... -> ... 1")
 
-    t = F.pad(t, (0, 1), value = pad_id)
+    t = F.pad(t, (0, 1), value=pad_id)
     t[batch_range, eos_indices] = eos_id
     return t
 
+
 # BEST-RQ model
+
 
 class BestRQ(nn.Module):
     def __init__(
@@ -63,14 +71,30 @@ class BestRQ(nn.Module):
     ):
         super().__init__()
 
+        """
+        What Happens Inside nn.LayerNorm
+        In this setup, nn.LayerNorm will apply normalization across the last dimension (i.e., n_mels) independently for each batch_size and time_step.
+        This means it will normalize each frame (of length n_mels) independently across the frequency bands to have zero mean and unit variance.
+        So, if you input a batch of Mel spectrograms of shape (32, 100, 80), the output will also have the same shape, 
+        but with each Mel feature vector normalized according to Layer Normalization.
+
+        elementwise_affine=True (Default)
+        Effect: Layer Normalization will learn a unique scaling and shifting factor for each feature dimension in the normalized input.
+        
+        So, with requires_grad=False, LayerNorm behaves like it does with elementwise_affine=False, providing only the standard normalization without any learnable adjustments.
+        """
+        # we have already introduced layer normalization to normalize the inputs to RPQ to unit mean and variance
+        # we can set Layernorm's requires_grad to True, as it would help normalize different inputs using scaling and shifting variables
+        # but as per the paper we would ideally need to keep the layer unlearnable, so another option is to just use norm=True
+        # norm=True, internally uses a LayerNorm with elementwise_affine = False
         self.rpq = nn.Sequential(
-            nn.LayerNorm(n_mels, elementwise_affine = True),
+            nn.LayerNorm(n_mels, elementwise_affine=True),
             RandomProjectionQuantizer(
-                dim = n_mels,
-                codebook_size = codebook_size,
-                codebook_dim = codebook_dim,
-                norm = False
-            )
+                dim=n_mels,
+                codebook_size=codebook_size,  # 1024
+                codebook_dim=codebook_dim,  # 16
+                norm=False,
+            ),
         )
         self.rpq.requires_grad = False
 
@@ -78,13 +102,13 @@ class BestRQ(nn.Module):
 
         self.feature_extractor = nn.Sequential(
             T.MelSpectrogram(
-                sample_rate = sample_rate,
-                n_mels = n_mels,
-                win_length = win_length,
-                hop_length = hop_length,
-                n_fft = default(n_fft, win_length)
+                sample_rate=sample_rate,
+                n_mels=n_mels,
+                win_length=win_length,
+                hop_length=hop_length,
+                n_fft=default(n_fft, win_length),
             ),
-            T.AmplitudeToDB()
+            T.AmplitudeToDB(),
         )
         self.feature_extractor.requires_grad = False
 
@@ -93,19 +117,19 @@ class BestRQ(nn.Module):
         self.pad_id = 0
         self.eos_id = codebook_size + 1
 
-    def load(self, path, strict = True):
+    def load(self, path, strict=True):
         path = Path(path)
         assert path.exists()
-        pkg = torch.load(str(path), map_location = 'cpu')
+        pkg = torch.load(str(path), map_location="cpu")
         try:
-            self.load_state_dict(pkg['model'], strict = strict)
+            self.load_state_dict(pkg["model"], strict=strict)
         except Exception:
-            self.load_state_dict(pkg['encoder'], strict = strict)
+            self.load_state_dict(pkg["encoder"], strict=strict)
         return pkg
 
     @torch.no_grad()
     def extract_features(self, x):
-        if x.device.type == 'mps':
+        if x.device.type == "mps":
             # work around ComplexFloat being unavailable with mps
             return self.feature_extractor.cpu()(x.cpu()).to(x.device)
         else:
@@ -113,12 +137,12 @@ class BestRQ(nn.Module):
 
     def forward(
         self,
-        x = None,
-        labels = None,
-        mask = None,
-        return_labels = False,
-        return_emb = False,
-        return_layer_output: Optional[int] = None
+        x=None,
+        labels=None,
+        mask=None,
+        return_labels=False,
+        return_emb=False,
+        return_layer_output: Optional[int] = None,
     ):
         assert exists(x) or exists(labels), "either input or labels must be provided"
 
@@ -139,25 +163,26 @@ class BestRQ(nn.Module):
             return labels
 
         if not exists(mask):
-            mask = torch.cat([rearrange(x != self.pad_id, "n -> 1 n") for x in labels.unbind(dim = 0)], dim = 0)
+            mask = torch.cat(
+                [rearrange(x != self.pad_id, "n -> 1 n") for x in labels.unbind(dim=0)],
+                dim=0,
+            )
 
         outputs = self.conformer(
             labels,
-            mask = mask,
-            return_layer_output = return_layer_output,
-            return_emb = return_emb
+            mask=mask,
+            return_layer_output=return_layer_output,
+            return_emb=return_emb,
         )
 
         return outputs
-    
+
+
 # pretraining task wrapper
 
+
 class BestRQPretrainWrapper(nn.Module):
-    def __init__(
-        self,
-        model: BestRQ,
-        mask_prob: float = 0.6
-    ):
+    def __init__(self, model: BestRQ, mask_prob: float = 0.6):
         super().__init__()
 
         self.model = model
@@ -167,21 +192,28 @@ class BestRQPretrainWrapper(nn.Module):
     def forward(self, x):
         # determine labels from the random projection quantizer
 
-        labels = self.model(x, return_labels = True)
+        # here it just return the labels for final loss calculation
+        labels = self.model(x, return_labels=True)
 
         # mask a subset of the labels for pretraining
         # TODO: mask sequences of n milliseconds/frames
 
-        seq_mask = torch.cat([rearrange(x != self.pad_id, "n -> 1 n") for x in labels.unbind(dim = 0)], dim = 0)
+        seq_mask = torch.cat(
+            [rearrange(x != self.pad_id, "n -> 1 n") for x in labels.unbind(dim=0)],
+            dim=0,
+        )
+
+        # in the original paper it uses 0.01 prob to select start tokens and then masks it to subsequent 20 tokens
+        # here it directly takes 0.6 prob
         mask = get_mask_subset_prob(seq_mask, self.mask_prob)
 
         # predict and compute ce loss
-
-        logits = self.model(labels = labels, mask = mask)
+        # here it actually passes the features through conformer to get the logits
+        logits = self.model(labels=labels, mask=mask)
         logits = rearrange(logits, "b n c -> b c n")
 
         masked_labels = labels.masked_fill(~mask, self.pad_id)
 
-        loss = F.cross_entropy(logits, masked_labels, ignore_index = self.pad_id)
+        loss = F.cross_entropy(logits, masked_labels, ignore_index=self.pad_id)
 
         return loss, logits
