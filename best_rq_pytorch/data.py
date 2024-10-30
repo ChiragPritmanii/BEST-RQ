@@ -65,10 +65,14 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         file = self.files[idx]
-        # when setting normalize=True; divides each sample value in the tensor by 2**bit_depth//2
-        # bit_depth determines the range of values each sample can take
-        # e.g. int16 meaning 16-bit depth -> 2**16//2 = 32768 -> range: [-32768, 32767]
-        wav, sr = torchaudio.load(file, normalize=True, backend="ffmpeg")
+        try:
+            # when setting normalize=True; divides each sample value in the tensor by 2**bit_depth//2
+            # bit_depth determines the range of values each sample can take
+            # e.g. int16 meaning 16-bit depth -> 2**16//2 = 32768 -> range: [-32768, 32767]
+            wav, sr = torchaudio.load(file, normalize=True, backend="ffmpeg")
+        except Exception as e:
+            print(f"Error loading item {self.files[idx]}: {e}")
+            return None
 
         # mean and resample operations on full audios are time expensive
         # directly select the n seconds clip, and then perform the mean and resample ops
@@ -136,7 +140,9 @@ def curtail_to_shortest_collate(data):
 
 @collate_one_or_multiple_tensors
 def pad_to_longest_fn(data):
-    return pad_sequence(data, batch_first=True)
+    # only keep the audios that were able to load
+    valid_items = [item for item in data if item is not None]
+    return pad_sequence(valid_items, batch_first=True)
 
 
 def get_dataloader(ds, pad_to_longest=True, **kwargs):
