@@ -1,6 +1,8 @@
 from pathlib import Path
 from functools import wraps
 
+import pandas as pd
+
 from beartype import beartype
 from beartype.typing import Optional, Tuple
 from beartype.door import is_bearable
@@ -25,22 +27,28 @@ def exists(val):
 class AudioDataset(Dataset):
     def __init__(
         self,
-        folder,
+        data: Optional[str] = None,
+        folder: Optional[str] = None,
         max_length_in_seconds: Optional[
             int
         ] = 32,  # longer segment size works well with music data
         pad_to_max_length=True,
     ):
         super().__init__()
-        path = Path(folder)
-        assert path.exists(), "folder does not exist"
-
-        # self.filenames = []
-        # data = pd.read_csv(audio_data)
-        # files = list(data["name"])
-
-        files = list(path.glob("**/*.wav"))
-        assert len(files) > 0, "no files found"
+        if folder != None:
+            path = Path(folder)
+            assert path.exists(), "folder does not exist"
+            files = list(path.glob("**/*.wav"))
+            assert len(files) > 0, "no files found"
+        elif data != None:
+            self.files = []
+            data = pd.read_csv(data)
+            files = list(data["name"])
+            assert len(files) > 0, "no files found"
+        else:
+            assert (
+                folder != None or data != None
+            ), "one of data/folder parameter needs to be provided"
 
         self.files = files
         self.target_sr = 24000
@@ -133,4 +141,6 @@ def pad_to_longest_fn(data):
 
 def get_dataloader(ds, pad_to_longest=True, **kwargs):
     collate_fn = pad_to_longest_fn if pad_to_longest else curtail_to_shortest_collate
-    return DataLoader(ds, collate_fn=collate_fn, **kwargs)
+    return DataLoader(
+        ds, collate_fn=collate_fn, num_workers=2, prefetch_factor=2, **kwargs
+    )
