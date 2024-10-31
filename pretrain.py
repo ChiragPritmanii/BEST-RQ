@@ -5,9 +5,10 @@ from best_rq_pytorch.data import AudioDataset
 
 # load the dataset
 
-dataset_folder = "/home/chirag/ins_stereo"
+# dataset_folder = "..."
+csv_path = "/home/chirag/datasets/audio_data.csv"
 
-ds = AudioDataset(dataset_folder, max_length_in_seconds=32)
+ds = AudioDataset(data=csv_path, max_length_in_seconds=32)
 
 # set up the model
 

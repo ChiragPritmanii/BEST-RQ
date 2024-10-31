@@ -43,7 +43,7 @@ class AudioDataset(Dataset):
         elif data != None:
             self.files = []
             data = pd.read_csv(data)
-            files = list(data["name"])
+            files = list(data["path"])
             assert len(files) > 0, "no files found"
         else:
             assert (
