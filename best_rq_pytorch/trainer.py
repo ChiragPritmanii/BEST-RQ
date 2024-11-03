@@ -309,10 +309,31 @@ class BestRQPretrainer(nn.Module):
 
             accum_log(logs, {"loss": loss.item() / self.grad_accum_every})
 
-        if exists(self.max_grad_norm):
-            self.accelerator.clip_grad_norm_(
-                self.model.parameters(), self.max_grad_norm
+        g_norm = torch.sqrt(
+            sum(
+                p.grad.norm() ** 2
+                for p in self.train_wrapper.parameters()
+                if p.grad is not None
             )
+        )
+        self.accelerator.log({"pre_clip_g_norm": g_norm}, step=steps)
+
+        if exists(self.max_grad_norm):
+            # self.accelerator.clip_grad_norm_(
+            #     self.model.parameters(), self.max_grad_norm
+            # )
+            self.accelerator.clip_grad_norm_(
+                self.train_wrapper.parameters(), self.max_grad_norm
+            )
+
+        g_norm = torch.sqrt(
+            sum(
+                p.grad.norm() ** 2
+                for p in self.train_wrapper.parameters()
+                if p.grad is not None
+            )
+        )
+        self.accelerator.log({"post_clip_g_norm": g_norm}, step=steps)
 
         self.optim.step()
         self.optim.zero_grad()
