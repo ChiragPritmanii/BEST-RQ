@@ -188,5 +188,5 @@ def get_activations(data):
 def get_dataloader(ds, **kwargs):
     collate_fn = get_activations
     return DataLoader(
-        ds, collate_fn=collate_fn, num_workers=0, prefetch_factor=2, **kwargs
+        ds, collate_fn=collate_fn, num_workers=0, **kwargs
     )
