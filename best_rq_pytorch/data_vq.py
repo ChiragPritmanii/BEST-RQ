@@ -179,6 +179,7 @@ def collate_one_or_multiple_tensors(fn):
 def get_activations(data):
     # only keep the audios that were able to load
     activations = [processed[1] for processed in data if processed[1] is not None]
+    print(activations.shape)
     activations = rearrange(torch.cat(activations, dim=1), "1 n d -> n d")
     return activations
 
