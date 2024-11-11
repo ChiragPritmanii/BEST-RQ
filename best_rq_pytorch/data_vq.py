@@ -178,15 +178,11 @@ def collate_one_or_multiple_tensors(fn):
 @collate_one_or_multiple_tensors
 def get_activations(data):
     # only keep the audios that were able to load
-    activations = [
-        activation for wave, activation in data if activation is not None
-    ]
+    activations = [processed[1] for processed in data if processed[1] is not None]
     activations = rearrange(torch.cat(activations, dim=1), "1 n d -> n d")
     return activations
 
 
 def get_dataloader(ds, **kwargs):
     collate_fn = get_activations
-    return DataLoader(
-        ds, collate_fn=collate_fn, num_workers=0, **kwargs
-    )
+    return DataLoader(ds, collate_fn=collate_fn, num_workers=0, **kwargs)
