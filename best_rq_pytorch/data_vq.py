@@ -152,30 +152,30 @@ class AudioDataset(Dataset):
 # data loader utilities
 
 
-def collate_one_or_multiple_tensors(fn):
-    @wraps(fn)
-    def inner(data):
-        is_one_data = not isinstance(data[0], tuple)
+# def collate_one_or_multiple_tensors(fn):
+#     @wraps(fn)
+#     def inner(data):
+#         is_one_data = not isinstance(data[0], tuple)
 
-        if is_one_data:
-            data = fn(data)
-            return (data,)
+#         if is_one_data:
+#             data = fn(data)
+#             return (data,)
 
-        outputs = []
-        for datum in zip(*data):
-            if is_bearable(datum, Tuple[str, ...]):
-                output = list(datum)
-            else:
-                output = fn(datum)
+#         outputs = []
+#         for datum in zip(*data):
+#             if is_bearable(datum, Tuple[str, ...]):
+#                 output = list(datum)
+#             else:
+#                 output = fn(datum)
 
-            outputs.append(output)
+#             outputs.append(output)
 
-        return tuple(outputs)
+#         return tuple(outputs)
 
-    return inner
+#     return inner
 
 
-@collate_one_or_multiple_tensors
+# @collate_one_or_multiple_tensors
 def get_activations(data):
     # only keep the audios that were able to load
     activations = [processed[1] for processed in data if processed[1] is not None]
