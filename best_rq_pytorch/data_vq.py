@@ -27,7 +27,6 @@ def exists(val):
     return val is not None
 
 
-pretrained_checkpoint = "/home/chirag/audio_tokenizer/best_rq_ckpts/bestrq.46000.pt"
 accelerator = "cuda"
 
 brq = BestRQ(
@@ -70,7 +69,7 @@ class AudioDataset(Dataset):
         super().__init__()
 
         self.pre_transform = pre_transform
-        pkg = self.pre_transform.load(pretrained_checkpoint)
+        self.pkg = self.pre_transform.load(pretrained_checkpoint)
 
         self.output_layer = output_layer
 
