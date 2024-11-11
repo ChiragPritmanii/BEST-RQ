@@ -143,10 +143,10 @@ class AudioDataset(Dataset):
                 (wav).to(accelerator),
                 return_layer_output=self.output_layer,
             )
-
+        activation = activation.detach().cpu()
         wav = rearrange(wav, "1 n -> n")  # 1, t -> t
 
-        return wav, activation
+        return wav, activation.detach().cpu()
 
 
 # data loader utilities
@@ -179,7 +179,7 @@ def collate_one_or_multiple_tensors(fn):
 def get_activations(data):
     # only keep the audios that were able to load
     activations = [
-        activation.cpu() for wave, activation in data if activation is not None
+        activation for wave, activation in data if activation is not None
     ]
     activations = rearrange(torch.cat(activations, dim=1), "1 n d -> n d")
     return activations
