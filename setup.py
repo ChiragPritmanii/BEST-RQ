@@ -25,6 +25,7 @@ setup(
         'rotary-embedding-torch>=0.3.0',
         'torch==2.4.1', #'torch>=2.0',
         'torchaudio==2.4.1', #'torchaudio>=2.0',
+        'pandas',
         'tqdm',
         'vector-quantize-pytorch>=1.7.0'
     ],
