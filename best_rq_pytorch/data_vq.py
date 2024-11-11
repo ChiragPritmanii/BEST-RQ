@@ -3,6 +3,8 @@ from functools import wraps
 
 import pandas as pd
 
+from einops import rearrange
+
 from beartype import beartype
 from beartype.typing import Optional, Tuple
 from beartype.door import is_bearable
@@ -17,14 +19,15 @@ from torchaudio.functional import resample
 
 # from torchaudio.transforms import Resample
 
-from einops import rearrange
+from best_rq_pytorch.best_rq import BestRQ
+from best_rq_pytorch.conformer import ConformerWrapper
 
 
 def exists(val):
     return val is not None
 
 
-pretrained_checkpoint = "..."
+pretrained_checkpoint = "/home/chirag/audio_tokenizer/best_rq_ckpts/bestrq.46000.pt"
 accelerator = "cuda"
 
 brq = BestRQ(
@@ -50,14 +53,13 @@ brq = BestRQ(
     ),
 ).to(accelerator)
 
-pkg = brq.load(pretrained_checkpoint)
-
 
 class AudioDataset(Dataset):
     def __init__(
         self,
-        pre_transform=brq,
         output_layer=14,
+        pre_transform=brq,
+        pretrained_checkpoint=None,
         data: Optional[str] = None,
         folder: Optional[str] = None,
         max_length_in_seconds: Optional[
@@ -68,6 +70,8 @@ class AudioDataset(Dataset):
         super().__init__()
 
         self.pre_transform = pre_transform
+        pkg = self.pre_transform.load(pretrained_checkpoint)
+
         self.output_layer = output_layer
 
         if folder != None:
