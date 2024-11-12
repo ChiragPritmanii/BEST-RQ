@@ -1,23 +1,81 @@
-from tqdm import tqdm
+import os
+import re
+from pathlib import Path
+from shutil import rmtree
+
+from beartype import beartype
+from beartype.typing import Optional
 
 import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import Dataset, random_split
-from einops import rearrange
-from vector_quantize_pytorch import VectorQuantize
 
-from best_rq_pytorch.data_vq import AudioDataset
-from best_rq_pytorch.data_vq import get_dataloader
+from best_rq_pytorch.vq import VQ
+from best_rq_pytorch.optimizer import get_optimizer
+from best_rq_pytorch.data import get_dataloader
 
-# Need to make changes here
+from accelerate import Accelerator, DistributedType
+from accelerate.utils import DistributedDataParallelKwargs, InitProcessGroupKwargs
+
+DEFAULT_DDP_KWARGS = DistributedDataParallelKwargs(find_unused_parameters=True)
+
+# utilities
 
 
+def exists(val):
+    return val is not None
 
-# load the dataset
-dataset_folder = "..."
-ds = AudioDataset(folder=dataset_folder)
+
+def noop(*args, **kwargs):
+    pass
+
+
+def cycle(dl):
+    while True:
+        for data in dl:
+            yield data
+
+
+def cast_tuple(t):
+    return t if isinstance(t, (tuple, list)) else (t,)
+
+
+def yes_or_no(question):
+    answer = input(f"{question} (y/n) ")
+    return answer.lower() in ("yes", "y")
+
+
+def accum_log(log, new_logs):
+    for key, new_value in new_logs.items():
+        old_value = log.get(key, 0.0)
+        log[key] = old_value + new_value
+    return log
+
+
+def checkpoint_num_steps(checkpoint_path):
+    """Returns the number of steps trained from a checkpoint based on the filename.
+
+    Filename format assumed to be something like "/path/to/speech.speech.20000.pt" which is
+    for 20k train steps. Returns 20000 in that case.
+    """
+    results = re.findall(r"\d+", str(checkpoint_path))
+
+    if len(results) == 0:
+        return 0
+
+    return int(results[-1])
+
+
+# not used anywhere
+def mask_after_eos(target, eos_id, pad_id):
+    mask = (target == eos_id).cumsum(dim=-1) > 0
+    mask = F.pad(mask, (1, -1), value=False)
+    return target.masked_fill(mask, pad_id)
+
+
+# pretraining
 
 
 class VQPretrainer(nn.Module):
@@ -31,7 +89,7 @@ class VQPretrainer(nn.Module):
         batch_size,
         dataset: Optional[Dataset] = None,
         lr=1e-4,
-        initial_lr=1e-5,
+        initial_lr=1e-6,
         grad_accum_every=1,
         wd=0.0,
         max_grad_norm=0.5,
@@ -58,6 +116,7 @@ class VQPretrainer(nn.Module):
             split_batches=split_batches,
             log_with=logger,
             project_dir=logs_folder,
+            kwargs_handlers=[DEFAULT_DDP_KWARGS],
             **accelerate_kwargs,
         )
 
@@ -77,12 +136,15 @@ class VQPretrainer(nn.Module):
         self.scheduler = CosineAnnealingLR(self.optim, T_max=num_train_steps)
 
         # max grad norm
+
         self.max_grad_norm = max_grad_norm
 
         # create dataset
+
         self.ds = dataset
 
         # split for validation
+
         if valid_frac > 0:
             train_size = int((1 - valid_frac) * len(self.ds))
             valid_size = len(self.ds) - train_size
@@ -119,9 +181,9 @@ class VQPretrainer(nn.Module):
 
         # prepare with accelerator
 
-        (self.train_wrapper, self.optim, self.scheduler, self.dl, self.valid_dl) = (
+        (self.model, self.optim, self.scheduler, self.dl, self.valid_dl) = (
             self.accelerator.prepare(
-                self.train_wrapper, self.optim, self.scheduler, self.dl, self.valid_dl
+                self.model, self.optim, self.scheduler, self.dl, self.valid_dl
             )
         )
 
@@ -157,7 +219,7 @@ class VQPretrainer(nn.Module):
             "learning_rate": lr,
             "initial_learning_rate": lr,
         }
-        self.accelerator.init_trackers("music_semantics", config=hps)
+        self.accelerator.init_trackers("music_semantics_vq", config=hps)
 
     def save(self, path):
         pkg = dict(
@@ -214,7 +276,7 @@ class VQPretrainer(nn.Module):
     def train_step(self):
         steps = int(self.steps.item())
 
-        self.train_wrapper.train()
+        self.model.train()
 
         # adjust the lr according to the schedule
 
@@ -238,33 +300,40 @@ class VQPretrainer(nn.Module):
             (x,) = next(self.dl_iter)
 
             # outputs: loss, logits
-            loss, _ = self.train_wrapper(x)
+            _, _, loss, loss_breakdown = self.model(x)
 
             self.accelerator.backward(loss / self.grad_accum_every)
 
             accum_log(logs, {"loss": loss.item() / self.grad_accum_every})
+            accum_log(
+                logs, {"commit_loss": loss_breakdown.commitment / self.grad_accum_every}
+            )
+            accum_log(
+                logs,
+                {
+                    "codebook_div_loss": loss_breakdown.codebook_diversity
+                    / self.grad_accum_every
+                },
+            )
 
         g_norm = torch.sqrt(
             sum(
                 p.grad.norm() ** 2
-                for p in self.train_wrapper.parameters()
+                for p in self.model.parameters()
                 if p.grad is not None
             )
         )
         self.accelerator.log({"pre_clip_g_norm": g_norm}, step=steps)
 
         if exists(self.max_grad_norm):
-            # self.accelerator.clip_grad_norm_(
-            #     self.model.parameters(), self.max_grad_norm
-            # )
             self.accelerator.clip_grad_norm_(
-                self.train_wrapper.parameters(), self.max_grad_norm
+                self.model.parameters(), self.max_grad_norm
             )
 
         g_norm = torch.sqrt(
             sum(
                 p.grad.norm() ** 2
-                for p in self.train_wrapper.parameters()
+                for p in self.model.parameters()
                 if p.grad is not None
             )
         )
@@ -281,6 +350,10 @@ class VQPretrainer(nn.Module):
         self.accelerator.log({"learning_rate": lr}, step=steps)
 
         self.accelerator.log({"train_loss": logs["loss"]}, step=steps)
+        self.accelerator.log({"train_commit_loss": logs["commit_loss"]}, step=steps)
+        self.accelerator.log(
+            {"train_codebook_div_loss": logs["codebook_div_loss"]}, step=steps
+        )
 
         # sample results every so often
 
@@ -290,16 +363,23 @@ class VQPretrainer(nn.Module):
             (x,) = next(self.valid_dl_iter)
 
             with torch.inference_mode():
-                self.train_wrapper.eval()
-                valid_loss, _ = self.train_wrapper(x)
+                self.model.eval()
+                _, _, valid_loss, valid_loss_breakdown = self.model(x)
 
             self.print(f"steps: {steps}: valid loss {valid_loss:0.3f}")
             self.accelerator.log({"valid_loss": valid_loss}, step=steps)
+            self.accelerator.log(
+                {"valid_commit_loss": valid_loss_breakdown.commitment}, step=steps
+            )
+            self.accelerator.log(
+                {"valid_codebook_div_loss": valid_loss_breakdown.codebook_diversity},
+                step=steps,
+            )
 
         # save model every so often
 
         if self.is_main and not (steps % self.save_model_every):
-            model_path = str(self.results_folder / f"bestrq.{steps}.pt")
+            model_path = str(self.results_folder / f"vq.{steps}.pt")
             self.save(model_path)
 
             self.print(f"{steps}: saving model to {str(self.results_folder)}")
@@ -313,21 +393,3 @@ class VQPretrainer(nn.Module):
             log_fn(logs)
 
         self.print("training complete")
-
-
-output_layer = 14
-
-samples = 0
-activations = []
-
-for wave, activation in tqdm(ds):
-    activations.append(activation.cpu())
-
-activations = rearrange(torch.cat(activations, dim=1), "1 n d -> n d")
-
-# dl = get_dataloader(self.ds, batch_size=batch_size, shuffle=True, drop_last=drop_last)
-
-
-x = torch.randn(1, 1600, 1024)
-quantized, indices, commit_loss = vq(x)  # (1, 1024, 256), (1, 1024), (1)
-quantized.shape, indices.shape, commit_loss

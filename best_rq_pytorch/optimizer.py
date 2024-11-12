@@ -30,6 +30,6 @@ def get_optimizer(
         ]
 
     if not has_wd:
-        return Adam(params, lr = lr, betas = betas, eps = eps)
+        return Adam(params, lr = lr, betas = betas, eps = eps) # without weight decay
 
     return AdamW(params, lr = lr, weight_decay = wd, betas = betas, eps = eps)
