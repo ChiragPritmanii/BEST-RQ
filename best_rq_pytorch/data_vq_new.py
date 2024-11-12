@@ -158,8 +158,11 @@ def get_activations(data):
     # only keep the audios that were able to load
     waves = [item for item in data if item is not None]
     waves = torch.cat(waves, dim=0)
+    print(waves.shape)
     activations = gpu_transform(waves)
+    print(activations.shape)
     activations = rearrange(activations, "1 n d -> n d")
+    print(activations.shape)
     return activations
 
 
