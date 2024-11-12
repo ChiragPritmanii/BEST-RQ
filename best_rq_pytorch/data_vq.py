@@ -50,7 +50,7 @@ brq = BestRQ(
             attn_flash=False,
         ),
     ),
-).to(accelerator)
+)
 
 
 class AudioDataset(Dataset):
@@ -68,7 +68,7 @@ class AudioDataset(Dataset):
     ):
         super().__init__()
 
-        self.pre_transform = pre_transform
+        self.pre_transform = pre_transform.to(accelerator)
         self.pkg = self.pre_transform.load(pretrained_checkpoint)
 
         self.output_layer = output_layer
@@ -148,7 +148,7 @@ class AudioDataset(Dataset):
         # transform = Resample(orig_freq=sr, new_freq=self.target_sr)
         # wav = transform(wav)
 
-        # activation = self.gpu_transform(wav)
+        activation = self.gpu_transform(wav)
         # with torch.no_grad():
         #     activation = self.pre_transform(
         #         (wav).to(accelerator),
@@ -156,9 +156,8 @@ class AudioDataset(Dataset):
         #     )
         # activation = activation.detach().cpu()
         wav = rearrange(wav, "1 n -> n")  # 1, t -> t
-        wav.to('cuda')
 
-        return wav, #activation
+        return wav, activation
 
 
 # data loader utilities
