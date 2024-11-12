@@ -146,7 +146,7 @@ class AudioDataset(Dataset):
         activation = activation.detach().cpu()
         wav = rearrange(wav, "1 n -> n")  # 1, t -> t
 
-        return wav, activation.detach().cpu()
+        return wav, activation
 
 
 # data loader utilities
@@ -161,4 +161,6 @@ def get_activations(data):
 
 def get_dataloader(ds, **kwargs):
     collate_fn = get_activations
-    return DataLoader(ds, collate_fn=collate_fn, num_workers=0, **kwargs)
+    return DataLoader(
+        ds, collate_fn=collate_fn, num_workers=0, pin_memory=True, **kwargs
+    )
