@@ -166,7 +166,7 @@ class AudioDataset(Dataset):
 def get_activations(data):
     # only keep the audios that were able to load
     activations = [processed[1] for processed in data if processed[1] is not None]
-    activations = rearrange(torch.cat(activations, dim=1), "1 n d -> n d")
+    activations = rearrange(torch.cat(activations, dim=1), "b n d -> (b n) d")
     return activations
 
 
