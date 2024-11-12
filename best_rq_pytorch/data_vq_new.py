@@ -161,7 +161,7 @@ def get_activations(data):
     print(waves.shape)
     activations = gpu_transform(waves)
     print(activations.shape)
-    activations = rearrange(activations, "1 n d -> n d")
+    activations = rearrange(activations,  "b n d -> (b n) d")
     print(activations.shape)
     return activations
 
