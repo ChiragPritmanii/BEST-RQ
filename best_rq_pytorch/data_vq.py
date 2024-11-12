@@ -98,6 +98,16 @@ class AudioDataset(Dataset):
         )
         self.pad_to_max_length = pad_to_max_length
 
+    def gpu_transform(self, wav):
+        """Applies pre-transform on the GPU."""
+        with torch.no_grad():
+            activation = self.pre_transform(
+                (wav).to(accelerator),
+                return_layer_output=self.output_layer,
+            )
+        activation = activation.detach().cpu()
+        return activation
+
     def __len__(self):
         return len(self.files)
 
@@ -138,12 +148,13 @@ class AudioDataset(Dataset):
         # transform = Resample(orig_freq=sr, new_freq=self.target_sr)
         # wav = transform(wav)
 
-        with torch.no_grad():
-            activation = self.pre_transform(
-                (wav).to(accelerator),
-                return_layer_output=self.output_layer,
-            )
-        activation = activation.detach().cpu()
+        activation = self.gpu_transform(wav)
+        # with torch.no_grad():
+        #     activation = self.pre_transform(
+        #         (wav).to(accelerator),
+        #         return_layer_output=self.output_layer,
+        #     )
+        # activation = activation.detach().cpu()
         wav = rearrange(wav, "1 n -> n")  # 1, t -> t
 
         return wav, activation
