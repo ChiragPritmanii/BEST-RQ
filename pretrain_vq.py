@@ -5,12 +5,13 @@ from best_rq_pytorch.data_vq import AudioDataset
 # load the dataset
 
 # dataset_folder = "..."
-brq_ckpt = "/home/chirag//audio_tokenizer/best_rq/runs/8/results/bestrq.100000.pt"
+# brq_ckpt = "/home/chirag//audio_tokenizer/best_rq/runs/8/results/bestrq.100000.pt"
 csv_path = "/home/chirag/datasets/audio_data.csv"
 
-ds = AudioDataset(
-    data=csv_path, pretrained_checkpoint=brq_ckpt, max_length_in_seconds=32
-)
+# ds = AudioDataset(
+# data=csv_path, pretrained_checkpoint=brq_ckpt, max_length_in_seconds=32
+# )
+ds = AudioDataset(data=csv_path, max_length_in_seconds=32)
 
 # set up the model
 
