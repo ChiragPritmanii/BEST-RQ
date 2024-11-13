@@ -306,16 +306,19 @@ class VQPretrainer(nn.Module):
 
             accum_log(logs, {"loss": loss.item() / self.grad_accum_every})
             accum_log(
-                logs, {"commit_loss": loss_breakdown.commitment / self.grad_accum_every}
+                logs,
+                {
+                    "commit_loss": loss_breakdown.commitment.item()
+                    / self.grad_accum_every
+                },
             )
             accum_log(
                 logs,
                 {
-                    "codebook_div_loss": loss_breakdown.codebook_diversity
+                    "codebook_div_loss": loss_breakdown.codebook_diversity.item()
                     / self.grad_accum_every
                 },
             )
-            print(loss_breakdown, type(loss_breakdown.commitment))
 
         g_norm = torch.sqrt(
             sum(
@@ -346,7 +349,7 @@ class VQPretrainer(nn.Module):
         # log
 
         if not (steps % self.log_every):
-            self.print(f"steps: {steps}: loss: {logs['loss']:0.3f}")
+            self.print(f"steps: {steps}: loss: {logs['loss']:0.3E}")
 
         self.accelerator.log({"learning_rate": lr}, step=steps)
 
@@ -367,13 +370,16 @@ class VQPretrainer(nn.Module):
                 self.model.eval()
                 _, _, valid_loss, valid_loss_breakdown = self.model(x)
 
-            self.print(f"steps: {steps}: valid loss {valid_loss.item():0.3f}")
+            self.print(f"steps: {steps}: valid loss {valid_loss.item():0.3E}")
             self.accelerator.log({"valid_loss": valid_loss.item()}, step=steps)
             self.accelerator.log(
-                {"valid_commit_loss": valid_loss_breakdown.commitment.item()}, step=steps
+                {"valid_commit_loss": valid_loss_breakdown.commitment.item()},
+                step=steps,
             )
             self.accelerator.log(
-                {"valid_codebook_div_loss": valid_loss_breakdown.codebook_diversity.item()},
+                {
+                    "valid_codebook_div_loss": valid_loss_breakdown.codebook_diversity.item()
+                },
                 step=steps,
             )
 
