@@ -28,8 +28,11 @@ def exists(val):
 
 
 accelerator = "cuda"
+pretrained_checkpoint = (
+    "/home/chirag//audio_tokenizer/best_rq/runs/8/results/bestrq.100000.pt"
+)
 
-brq = BestRQ(
+pre_transform = BestRQ(
     codebook_size=1024,
     codebook_dim=16,
     sample_rate=24_000,
@@ -50,15 +53,14 @@ brq = BestRQ(
             attn_flash=False,
         ),
     ),
-)
+).to(accelerator)
+
+pkg = pre_transform.load(pretrained_checkpoint)
 
 
 class AudioDataset(Dataset):
     def __init__(
         self,
-        output_layer=14,
-        pre_transform=brq,
-        pretrained_checkpoint=None,
         data: Optional[str] = None,
         folder: Optional[str] = None,
         max_length_in_seconds: Optional[
@@ -67,11 +69,6 @@ class AudioDataset(Dataset):
         pad_to_max_length=True,
     ):
         super().__init__()
-
-        self.pre_transform = pre_transform.to(accelerator)
-        self.pkg = self.pre_transform.load(pretrained_checkpoint)
-
-        self.output_layer = output_layer
 
         if folder != None:
             path = Path(folder)
@@ -97,16 +94,6 @@ class AudioDataset(Dataset):
             else None
         )
         self.pad_to_max_length = pad_to_max_length
-
-    def gpu_transform(self, wav):
-        """Applies pre-transform on the GPU."""
-        with torch.no_grad():
-            activation = self.pre_transform(
-                (wav).to(accelerator),
-                return_layer_output=self.output_layer,
-            )
-        activation = activation.detach().cpu()
-        return activation
 
     def __len__(self):
         return len(self.files)
@@ -148,25 +135,29 @@ class AudioDataset(Dataset):
         # transform = Resample(orig_freq=sr, new_freq=self.target_sr)
         # wav = transform(wav)
 
-        activation = self.gpu_transform(wav)
-        # with torch.no_grad():
-        #     activation = self.pre_transform(
-        #         (wav).to(accelerator),
-        #         return_layer_output=self.output_layer,
-        #     )
-        # activation = activation.detach().cpu()
-        wav = rearrange(wav, "1 n -> n")  # 1, t -> t
-
-        return wav, activation
+        return wav
 
 
 # data loader utilities
 
 
+def apply_transform(waves, output_layer=14, pre_transform=pre_transform):
+    """Applies pre-transform on the GPU."""
+    with torch.no_grad():
+        activation = pre_transform(
+            (waves).to(accelerator),
+            return_layer_output=output_layer,
+        )
+    activation = activation.detach().cpu()
+    return activation
+
+
 def get_activations(data):
     # only keep the audios that were able to load
-    activations = [processed[1] for processed in data if processed[1] is not None]
-    activations = rearrange(torch.cat(activations, dim=1), "b n d -> (b n) d")
+    waves = [item for item in data if item is not None]
+    waves = torch.cat(waves, dim=0)
+    activations = apply_transform(waves)
+    activations = rearrange(activations, "b n d -> (b n) d")
     return activations
 
 

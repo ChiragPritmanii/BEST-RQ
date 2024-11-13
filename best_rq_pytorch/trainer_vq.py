@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, random_split
 
 from best_rq_pytorch.vq import VQ
 from best_rq_pytorch.optimizer import get_optimizer
-from best_rq_pytorch.data import get_dataloader
+from best_rq_pytorch.data_vq import get_dataloader
 
 from accelerate import Accelerator, DistributedType
 from accelerate.utils import DistributedDataParallelKwargs, InitProcessGroupKwargs
