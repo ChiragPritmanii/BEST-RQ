@@ -366,8 +366,11 @@ class VQPretrainer(nn.Module):
         if self.is_main and not (steps % self.save_results_every):
             x = next(self.valid_dl_iter)
 
+            # with torch.no_grad():
+            # or
             with torch.inference_mode():
-                self.model.eval()
+                # removing below line would result in calculating and logging losses
+                # self.model.eval()
                 _, _, valid_loss, valid_loss_breakdown = self.model(x)
 
             self.print(f"steps: {steps}: valid loss {valid_loss.item():0.3E}")
