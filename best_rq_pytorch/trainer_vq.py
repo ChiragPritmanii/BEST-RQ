@@ -315,6 +315,7 @@ class VQPretrainer(nn.Module):
                     / self.grad_accum_every
                 },
             )
+            print(loss_breakdown, type(loss_breakdown.commitment))
 
         g_norm = torch.sqrt(
             sum(
@@ -366,13 +367,13 @@ class VQPretrainer(nn.Module):
                 self.model.eval()
                 _, _, valid_loss, valid_loss_breakdown = self.model(x)
 
-            self.print(f"steps: {steps}: valid loss {valid_loss:0.3f}")
-            self.accelerator.log({"valid_loss": valid_loss}, step=steps)
+            self.print(f"steps: {steps}: valid loss {valid_loss.item():0.3f}")
+            self.accelerator.log({"valid_loss": valid_loss.item()}, step=steps)
             self.accelerator.log(
-                {"valid_commit_loss": valid_loss_breakdown.commitment}, step=steps
+                {"valid_commit_loss": valid_loss_breakdown.commitment.item()}, step=steps
             )
             self.accelerator.log(
-                {"valid_codebook_div_loss": valid_loss_breakdown.codebook_diversity},
+                {"valid_codebook_div_loss": valid_loss_breakdown.codebook_diversity.item()},
                 step=steps,
             )
 
