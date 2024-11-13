@@ -297,7 +297,7 @@ class VQPretrainer(nn.Module):
         # update encoder
 
         for _ in range(self.grad_accum_every):
-            (x,) = next(self.dl_iter)
+            x = next(self.dl_iter)
 
             # outputs: loss, logits
             _, _, loss, loss_breakdown = self.model(x)
@@ -360,7 +360,7 @@ class VQPretrainer(nn.Module):
         self.accelerator.wait_for_everyone()
 
         if self.is_main and not (steps % self.save_results_every):
-            (x,) = next(self.valid_dl_iter)
+            x = next(self.valid_dl_iter)
 
             with torch.inference_mode():
                 self.model.eval()
