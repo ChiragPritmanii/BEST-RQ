@@ -346,8 +346,8 @@ class VQPretrainer(nn.Module):
 
         # we perform the below operation after computing gnorms, because we need logs for each step
         nan_grads = False
-        for param in self.model.parameters():
-            if param.grad is not None and torch.isnan(param.grad).any():
+        for p in self.model.parameters():
+            if p.grad is not None and torch.isnan(p.grad).any():
                 nan_grads = True
                 break
 
