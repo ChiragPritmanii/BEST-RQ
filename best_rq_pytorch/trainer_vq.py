@@ -230,8 +230,9 @@ class VQPretrainer(nn.Module):
         torch.save(pkg, path)
 
     def load(self, path, restore_optimizer=True):
-        model = self.accelerator.unwrap_model(self.model)
-        pkg = model.load(path)
+        # changed model to self.model to make sure the weights are loaded in self.model variable
+        self.model = self.accelerator.unwrap_model(self.model)
+        pkg = self.model.load(path)
 
         if restore_optimizer:
             self.optim.load_state_dict(pkg["optim"])
@@ -343,7 +344,21 @@ class VQPretrainer(nn.Module):
         )
         self.accelerator.log({"post_clip_g_norm": g_norm}, step=steps)
 
-        self.optim.step()
+        # we perform the below operation after computing gnorms, because we need logs for each step
+        nan_grads = False
+        for param in self.model.parameters():
+            if param.grad is not None and torch.isnan(param.grad).any():
+                nan_grads = True
+                break
+
+        # if gradients are nan then skip the update
+        if nan_grads:
+            self.print("NaN detected in gradients! Skipping optimization step.")
+        # else make the weight update
+        else:
+            self.optim.step()
+
+        # zero out the gradients as usual
         self.optim.zero_grad()
 
         # log
@@ -397,7 +412,11 @@ class VQPretrainer(nn.Module):
         self.steps += 1
         return logs
 
-    def train(self, log_fn=noop):
+    def train(self, log_fn=noop, resume_checkpoint_path=None):
+        if resume_checkpoint_path:
+            self.print(f"Resuming training from checkpoint: {resume_checkpoint_path}")
+            self.load(path=resume_checkpoint_path)
+
         while self.steps < self.num_train_steps:
             logs = self.train_step()
             log_fn(logs)
