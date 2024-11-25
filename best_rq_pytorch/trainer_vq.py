@@ -395,6 +395,7 @@ class VQPretrainer(nn.Module):
         if self.is_main and not (steps % self.save_results_every):
             x = next(self.valid_dl_iter)
 
+            # Disable grad calculation but keep the model in train mode so we can track losses
             # with torch.no_grad():
             # or
             with torch.inference_mode():
